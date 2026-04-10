@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCM Waveform Monitor</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;500;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green: #00ff88;
+      --green-dim: #00cc6a;
+      --green-dark: #003d1f;
+      --green-muted: #1a4a30;
+      --green-subtle: #0d2e1f;
+      --green-faint: #0a1f14;
+      --bg-deep: #050c08;
+      --bg-card: #0a110d;
+      --bg-panel: #0d1810;
+      --border: #1a3322;
+      --border-bright: #2a5a3a;
+      --text-dim: #3d7a5a;
+      --text-mid: #5aaa7a;
+      --red: #ff4466;
+      --amber: #ffaa00;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-deep);
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--green);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,255,136,0.012) 2px,
+        rgba(0,255,136,0.012) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* NAV */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 56px;
+      background: rgba(5,12,8,0.92);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 32px;
+      gap: 0;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+
+    .nav-brand {
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.2em;
+      margin-right: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-brand-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: blink 1.4s infinite;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 2px;
+    }
+
+    .nav-tab {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 8px 20px;
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .nav-tab:hover { color: var(--green-dim); border-color: var(--border); }
+    .nav-tab.active {
+      color: var(--green);
+      background: var(--green-subtle);
+      border-color: var(--green-muted);
+    }
+
+    /* PAGES */
+    .page { display: none; padding-top: 56px; min-height: 100vh; }
+    .page.active { display: block; }
+
+    /* ===================== PAGE 1: MONITOR ===================== */
+    .monitor-wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    .monitor-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .monitor-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      line-height: 1.3;
+    }
+
+    .monitor-subtitle {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.14em;
+      margin-top: 4px;
+    }
+
+    .report-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--green);
+      background: var(--green-subtle);
+      border: 1px solid var(--green-muted);
+      border-radius: 8px;
+      padding: 12px 22px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      white-space: nowrap;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .report-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(0,255,136,0.06), transparent);
+      transform: translateX(-100%);
+      transition: transform 0.5s;
+    }
+
+    .report-btn:hover::before { transform: translateX(100%); }
+    .report-btn:hover {
+      background: var(--green-muted);
+      border-color: var(--green-dim);
+      box-shadow: 0 0 20px rgba(0,255,136,0.12);
+    }
+
+    .report-icon {
+      width: 18px; height: 18px;
+      border: 1.5px solid var(--green-dim);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
+    /* STATS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--green-muted);
+    }
+
+    .stat-label {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--green);
+      line-height: 1;
+    }
+
+    .stat-unit {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-left: 3px;
+    }
+
+    /* OSCILLOSCOPE */
+    .scope-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .scope-topbar {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+
+    .scope-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .scope-label span {
+      color: var(--green-dim);
+    }
+
+    .scope-divider { flex: 1; }
+
+    .scope-ch {
+      font-size: 9px;
+      background: var(--green-subtle);
+      color: var(--green-dim);
+      border: 1px solid var(--green-muted);
+      border-radius: 4px;
+      padding: 2px 8px;
+      letter-spacing: 0.1em;
+    }
+
+    .scope-wrap {
+      position: relative;
+      background: #030a05;
+    }
+
+    .y-axis {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 44px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 8px 6px;
+      border-right: 1px solid var(--border);
+      z-index: 2;
+    }
+
+    .y-tick {
+      font-size: 8px;
+      color: var(--text-dim);
+      text-align: right;
+    }
+
+    canvas#waveform {
+      display: block;
+      width: calc(100% - 44px);
+      margin-left: 44px;
+      height: 260px;
+    }
+
+    /* CONTROLS */
+    .controls-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-panel);
+    }
+
+    .ctrl-btn {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 7px 16px;
+      background: var(--green-subtle);
+      color: var(--green-dim);
+      border: 1px solid var(--green-muted);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .ctrl-btn:hover { background: var(--green-muted); color: var(--green); }
+    .ctrl-btn.danger { color: var(--red); border-color: rgba(255,68,102,0.3); background: rgba(255,68,102,0.05); }
+    .ctrl-btn.danger:hover { background: rgba(255,68,102,0.12); }
+
+    .speed-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
+    }
+
+    .speed-label { font-size: 9px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100px;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--green);
+      cursor: pointer;
+      border: 2px solid var(--bg-deep);
+      box-shadow: 0 0 6px rgba(0,255,136,0.4);
+    }
+
+    .speed-val {
+      font-family: 'Orbitron', monospace;
+      font-size: 12px;
+      color: var(--green);
+      min-width: 20px;
+    }
+
+    /* STATUS BAR */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 16px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-top: 0;
+      flex-wrap: wrap;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+
+    .status-val {
+      color: var(--green-dim);
+      font-size: 10px;
+    }
+
+    .status-sep { color: var(--border-bright); margin: 0 2px; }
+
+    .live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: blink 1s infinite;
+      flex-shrink: 0;
+    }
+
+    .live-dot.off {
+      background: var(--red);
+      animation: none;
+    }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+
+    /* ===================== PAGE 2: THEORY ===================== */
+    .theory-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    .theory-hero {
+      text-align: center;
+      margin-bottom: 56px;
+      padding-bottom: 40px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .theory-eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.24em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .theory-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+
+    .theory-title span { color: var(--green-dim); }
+
+    .theory-desc {
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      color: var(--text-mid);
+      line-height: 1.8;
+      max-width: 600px;
+      margin: 0 auto;
+      font-weight: 300;
+    }
+
+    /* SECTION */
+    .t-section {
+      margin-bottom: 52px;
+    }
+
+    .t-section-label {
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .t-section-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .t-section-num {
+      font-size: 11px;
+      background: var(--green-subtle);
+      color: var(--green-dim);
+      border: 1px solid var(--green-muted);
+      border-radius: 4px;
+      padding: 3px 9px;
+    }
+
+    .t-body {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--text-mid);
+      line-height: 1.85;
+      font-weight: 300;
+    }
+
+    .t-body p { margin-bottom: 14px; }
+
+    .t-body strong {
+      color: var(--green);
+      font-weight: 500;
+    }
+
+    /* STEP CARDS */
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin: 20px 0;
+    }
+
+    .step-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .step-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+    }
+
+    .step-card.c1::before { background: var(--green); }
+    .step-card.c2::before { background: var(--amber); }
+    .step-card.c3::before { background: #00aaff; }
+
+    .step-num {
+      font-family: 'Orbitron', monospace;
+      font-size: 28px;
+      font-weight: 700;
+      opacity: 0.12;
+      position: absolute;
+      top: 10px; right: 14px;
+      line-height: 1;
+    }
+
+    .step-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      color: var(--green);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .step-card.c2 .step-title { color: var(--amber); }
+    .step-card.c3 .step-title { color: #00aaff; }
+
+    .step-body {
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      color: var(--text-mid);
+      line-height: 1.7;
+      font-weight: 300;
+    }
+
+    /* COMPONENT TABLE */
+    .comp-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+
+    .comp-table th {
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      text-align: left;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-panel);
+    }
+
+    .comp-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: var(--text-mid);
+      line-height: 1.5;
+      font-weight: 300;
+    }
+
+    .comp-table tr:last-child td { border-bottom: none; }
+    .comp-table td:first-child { color: var(--green); font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+    .comp-table td:nth-child(2) { color: var(--green-dim); font-size: 12px; }
+
+    .comp-table tbody tr:hover td { background: var(--bg-card); }
+
+    /* FLOW */
+    .flow-row {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 24px 0;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .flow-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      text-align: center;
+      flex-shrink: 0;
+      min-width: 110px;
+    }
+
+    .flow-box-label {
+      font-size: 8px;
+      color: var(--text-dim);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .flow-box-val {
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      color: var(--green);
+    }
+
+    .flow-box.highlight {
+      border-color: var(--green-muted);
+      background: var(--green-subtle);
+    }
+
+    .flow-arrow {
+      font-size: 18px;
+      color: var(--border-bright);
+      padding: 0 8px;
+      flex-shrink: 0;
+    }
+
+    /* INSIGHT BOX */
+    .insight {
+      background: var(--green-subtle);
+      border: 1px solid var(--green-muted);
+      border-left: 3px solid var(--green);
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin: 20px 0;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: var(--text-mid);
+      line-height: 1.7;
+      font-weight: 300;
+    }
+
+    .insight strong { color: var(--green); font-weight: 500; }
+
+    /* PCM DIAGRAM */
+    .pcm-diagram {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+
+    .pcm-diagram canvas {
+      display: block;
+      width: 100%;
+      height: 140px;
+    }
+
+    .pcm-diagram-label {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    /* FORMULA */
+    .formula-box {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+      color: var(--green-dim);
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+
+    .formula-comment {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+
+    /* FOOTER */
+    .theory-footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .footer-text {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+
+    @media (max-width: 640px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps-grid { grid-template-columns: 1fr; }
+      .theory-title { font-size: 22px; }
+      .monitor-title { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-brand-dot"></div>
+    PCM Monitor
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('monitor', this)">&#9632; Live Monitor</button>
+    <button class="nav-tab" onclick="showPage('theory', this)">&#9632; Theory &amp; Report</button>
+  </div>
+</nav>
+
+<!-- ===================== PAGE 1 ===================== -->
+<div class="page active" id="page-monitor">
+  <div class="monitor-wrap">
+
+    <div class="monitor-header">
+      <div>
+        <div class="monitor-title">PCM Waveform Monitor</div>
+        <div class="monitor-subtitle">Real-time ADC Signal Visualization &mdash; Arduino Uno &mdash; 10-bit Resolution</div>
+      </div>
+      <a href="project-report.pdf" target="_blank" class="report-btn">
+        <div class="report-icon">&#8659;</div>
+        Open Project Report
+      </a>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Voltage</div>
+        <div class="stat-value" id="s-volt">--<span class="stat-unit">V</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Raw ADC</div>
+        <div class="stat-value" id="s-raw">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Min ADC</div>
+        <div class="stat-value" id="s-min">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Max ADC</div>
+        <div class="stat-value" id="s-max">--</div>
+      </div>
+    </div>
+
+    <div class="scope-container">
+      <div class="scope-topbar">
+        <span class="scope-label">CH1 &mdash; <span>A0 / Potentiometer</span></span>
+        <span class="scope-label">Time/Div: <span>100ms</span></span>
+        <span class="scope-label">V/Div: <span>1.25V</span></span>
+        <div class="scope-divider"></div>
+        <span class="scope-ch">10-BIT PCM</span>
+        <span class="scope-ch">9600 BAUD</span>
+      </div>
+
+      <div class="scope-wrap">
+        <div class="y-axis">
+          <span class="y-tick">5.0V</span>
+          <span class="y-tick">3.75</span>
+          <span class="y-tick">2.5V</span>
+          <span class="y-tick">1.25</span>
+          <span class="y-tick">0V</span>
+        </div>
+        <canvas id="waveform" height="260"></canvas>
+      </div>
+
+      <div class="controls-row">
+        <button class="ctrl-btn" id="btn-pause" onclick="togglePause()">&#9646;&#9646; Pause</button>
+        <button class="ctrl-btn danger" onclick="clearWave()">&#8635; Clear</button>
+        <div class="speed-wrap">
+          <span class="speed-label">Scroll</span>
+          <input type="range" id="speed" min="1" max="10" value="5" step="1"
+            oninput="speed=parseInt(this.value); document.getElementById('speed-val').textContent=this.value">
+          <span class="speed-val" id="speed-val">5</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="live-dot" id="live-dot"></div>
+        <span class="status-val" id="status-text">CONNECTING...</span>
+      </div>
+      <span class="status-sep">|</span>
+      <div class="status-item">Port: <span class="status-val">&nbsp;COM3</span></div>
+      <span class="status-sep">|</span>
+      <div class="status-item">Baud: <span class="status-val">&nbsp;9600</span></div>
+      <span class="status-sep">|</span>
+      <div class="status-item">ADC: <span class="status-val">&nbsp;10-bit (0–1023)</span></div>
+      <span class="status-sep">|</span>
+      <div class="status-item">Ref: <span class="status-val">&nbsp;5.0V</span></div>
+      <span class="status-sep">|</span>
+      <div class="status-item">Samples: <span class="status-val" id="s-total">&nbsp;0</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================== PAGE 2 ===================== -->
+<div class="page" id="page-theory">
+  <div class="theory-wrap">
+
+    <div class="theory-hero">
+      <div class="theory-eyebrow">Subject: Analog to Digital Conversion</div>
+      <div class="theory-title">Pulse Code<br><span>Modulation</span></div>
+      <div class="theory-desc">
+        A complete study of PCM — from fundamental theory to real hardware implementation using Arduino Uno, a potentiometer, LEDs, and resistors.
+      </div>
+    </div>
+
+    <!-- SECTION 1: WHAT IS PCM -->
+    <div class="t-section">
+      <div class="t-section-label">Section 01</div>
+      <div class="t-section-title">
+        <span class="t-section-num">01</span>
+        What is Pulse Code Modulation?
+      </div>
+      <div class="t-body">
+        <p>
+          <strong>Pulse Code Modulation (PCM)</strong> is a method used to digitally represent sampled analog signals. It is the standard form of digital audio in computers, telephony, CD-ROMs, and more. PCM converts a continuous analog signal into a discrete sequence of binary numbers — a process that forms the backbone of all modern digital communication systems.
+        </p>
+        <p>
+          In PCM, the amplitude of the analog signal is sampled at regular time intervals, and each sample is quantized to the nearest value within a defined range. These quantized values are then encoded as binary numbers (bits) and transmitted or stored digitally.
+        </p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card c1">
+          <div class="step-num">01</div>
+          <div class="step-title">Sampling</div>
+          <div class="step-body">The analog signal is measured at uniform time intervals defined by the <strong>sampling rate</strong> (Hz). Per Nyquist's theorem, the rate must be at least 2× the highest signal frequency.</div>
+        </div>
+        <div class="step-card c2">
+          <div class="step-num">02</div>
+          <div class="step-title">Quantization</div>
+          <div class="step-body">Each sample is rounded to the nearest discrete level. The number of levels is determined by <strong>bit depth</strong>. Arduino's ADC uses 10-bit resolution — giving 1024 quantization levels (0–1023).</div>
+        </div>
+        <div class="step-card c3">
+          <div class="step-num">03</div>
+          <div class="step-title">Encoding</div>
+          <div class="step-body">Each quantized value is converted to a <strong>binary number</strong>. The resulting stream of 0s and 1s is the PCM digital signal, ready to be transmitted, stored, or processed.</div>
+        </div>
+      </div>
+
+      <div class="pcm-diagram">
+        <canvas id="pcm-diag" height="140"></canvas>
+        <div class="pcm-diagram-label">PCM: Analog signal (green) sampled &amp; quantized (amber steps)</div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: THEORY -->
+    <div class="t-section">
+      <div class="t-section-label">Section 02</div>
+      <div class="t-section-title">
+        <span class="t-section-num">02</span>
+        Key Formulas &amp; Concepts
+      </div>
+
+      <div class="t-body">
+        <p><strong>Nyquist-Shannon Sampling Theorem</strong> — To faithfully reconstruct a signal, the sampling frequency must be at least twice the maximum frequency of the signal.</p>
+      </div>
+
+      <div class="formula-box">
+        f<sub>s</sub> &ge; 2 &times; f<sub>max</sub>
+        <div class="formula-comment">f_s = sampling frequency &nbsp;|&nbsp; f_max = highest frequency in signal</div>
+      </div>
+
+      <div class="t-body">
+        <p><strong>Quantization Levels</strong> — The number of discrete levels available depends on the bit depth n of the ADC. Arduino uses 10-bit ADC giving 1024 levels.</p>
+      </div>
+
+      <div class="formula-box">
+        L = 2<sup>n</sup> &nbsp;&nbsp;&nbsp; &rarr; &nbsp;&nbsp;&nbsp; 2<sup>10</sup> = 1024 levels (Arduino Uno)
+        <div class="formula-comment">L = quantization levels &nbsp;|&nbsp; n = number of bits</div>
+      </div>
+
+      <div class="t-body">
+        <p><strong>Step Size / Resolution</strong> — The voltage difference between each quantization level.</p>
+      </div>
+
+      <div class="formula-box">
+        &Delta;V = V<sub>ref</sub> / L &nbsp;&nbsp;&nbsp; &rarr; &nbsp;&nbsp;&nbsp; 5V / 1024 &asymp; <strong>4.88 mV per step</strong>
+        <div class="formula-comment">V_ref = 5V (Arduino reference) &nbsp;|&nbsp; Each ADC step = 4.88 mV</div>
+      </div>
+
+      <div class="t-body">
+        <p><strong>Quantization Error</strong> — The difference between actual analog value and its quantized digital representation. It is bounded by ±½ step size.</p>
+      </div>
+
+      <div class="formula-box">
+        e<sub>q</sub> = &plusmn; &Delta;V / 2 &nbsp;&asymp; &nbsp;&plusmn; 2.44 mV
+      </div>
+    </div>
+
+    <!-- SECTION 3: OUR PROJECT -->
+    <div class="t-section">
+      <div class="t-section-label">Section 03</div>
+      <div class="t-section-title">
+        <span class="t-section-num">03</span>
+        Our Project — Hardware Implementation
+      </div>
+
+      <div class="t-body">
+        <p>
+          Our project physically demonstrates the PCM process using an <strong>Arduino Uno</strong> as the ADC engine. A <strong>potentiometer</strong> acts as the continuously varying analog input, simulating a real-world analog signal. The Arduino samples this signal using its built-in 10-bit ADC at pin A0.
+        </p>
+      </div>
+
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>PCM Role</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Potentiometer</td>
+            <td>Analog Signal Source</td>
+            <td>Produces a continuously varying voltage (0–5V) — represents the raw analog input to be sampled</td>
+          </tr>
+          <tr>
+            <td>Arduino Uno (ADC)</td>
+            <td>Sampler + Quantizer</td>
+            <td>Samples pin A0 at ~100Hz, quantizes to 10-bit (0–1023), encodes to binary via analogRead()</td>
+          </tr>
+          <tr>
+            <td>LED + Resistor</td>
+            <td>Digital Output / Indicator</td>
+            <td>Brightness proportional to ADC value — visually represents the quantized PCM level</td>
+          </tr>
+          <tr>
+            <td>USB Serial</td>
+            <td>PCM Data Transmission</td>
+            <td>Transmits encoded digital values at 9600 baud to PC — the actual PCM bitstream</td>
+          </tr>
+          <tr>
+            <td>Python + WebSocket</td>
+            <td>Signal Processing / Display</td>
+            <td>Receives PCM data, reconstructs waveform on browser in real time</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SECTION 4: CORRELATION -->
+    <div class="t-section">
+      <div class="t-section-label">Section 04</div>
+      <div class="t-section-title">
+        <span class="t-section-num">04</span>
+        Theory ↔ Hardware Correlation
+      </div>
+
+      <div class="t-body">
+        <p>
+          Every theoretical step of PCM maps directly to a physical component in our circuit. Understanding this correlation is key to grasping how <strong>ADC theory translates to real-world digital systems</strong>.
+        </p>
+      </div>
+
+      <div class="flow-row">
+        <div class="flow-box c1">
+          <div class="flow-box-label">Analog Signal</div>
+          <div class="flow-box-val">Potentiometer</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box highlight">
+          <div class="flow-box-label">Sampling</div>
+          <div class="flow-box-val">analogRead()</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-box-label">Quantization</div>
+          <div class="flow-box-val">0 – 1023</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-box-label">Encoding</div>
+          <div class="flow-box-val">10-bit Binary</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box highlight">
+          <div class="flow-box-label">Transmission</div>
+          <div class="flow-box-val">Serial USB</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-box-label">Display</div>
+          <div class="flow-box-val">Waveform UI</div>
+        </div>
+      </div>
+
+      <div class="insight">
+        <strong>Key Insight:</strong> When you rotate the potentiometer, the voltage at A0 changes smoothly — this is the continuous analog domain. The moment <code>analogRead(A0)</code> is called, the Arduino freezes that voltage, compares it against 1024 voltage steps internally, and outputs the nearest integer. This single function call performs <em>sampling</em> and <em>quantization</em> simultaneously — both core PCM operations — in microseconds.
+      </div>
+
+      <div class="t-body">
+        <p>
+          The <strong>LED brightness</strong> provides tangible feedback: it represents the quantized PCM level. A dim LED = low ADC value = low voltage sample. A bright LED = high ADC value = high voltage sample. This directly shows quantization in action with a physical indicator.
+        </p>
+        <p>
+          The <strong>serial transmission</strong> at 9600 baud represents the PCM bitstream being transmitted over a channel — analogous to how PCM audio is transmitted in telephone networks or stored on CDs. The Python server acts as the receiver, reconstructing the original waveform from the digital samples — completing the full PCM encode-transmit-decode cycle.
+        </p>
+      </div>
+    </div>
+
+    <!-- SECTION 5: WHAT WE LEARNED -->
+    <div class="t-section">
+      <div class="t-section-label">Section 05</div>
+      <div class="t-section-title">
+        <span class="t-section-num">05</span>
+        What We Learned
+      </div>
+
+      <div class="t-body">
+        <p>
+          Through this project, we observed that <strong>resolution directly affects signal fidelity</strong>. With 10-bit ADC, our voltage resolution is ~4.88mV — sufficiently fine for slow-moving signals like a potentiometer. However, for audio signals (up to 20kHz), we would need a sampling rate exceeding 40kHz — far above our 100Hz demo rate, which illustrates the practical meaning of the Nyquist theorem.
+        </p>
+        <p>
+          We also understood <strong>quantization error</strong> not as an abstract formula, but as the visible "staircase" effect in the waveform — where smooth analog motion appears as discrete jumps on screen. The real-time display made this concretely visible in a way that no textbook diagram can replicate.
+        </p>
+        <p>
+          The project tied together concepts from <strong>signal processing, digital electronics, serial communication, and web technology</strong> — demonstrating that ADC is not an isolated circuit concept but the foundational bridge between the physical and digital worlds.
+        </p>
+      </div>
+
+      <div class="insight">
+        <strong>Conclusion:</strong> PCM is the universal language that converts nature's analog signals into the binary language of computers. Our Arduino circuit, humble as it appears, performs the exact same fundamental operations used in professional audio interfaces, medical sensors, and satellite communication systems — just at a smaller scale.
+      </div>
+    </div>
+
+    <div class="theory-footer">
+      <div class="footer-text">Subject: Analog to Digital Conversion &nbsp;|&nbsp; PCM Project Report</div>
+      <a href="project-report.pdf" target="_blank" class="report-btn" style="padding: 10px 18px;">
+        <div class="report-icon">&#8659;</div>
+        Download Project Report PDF
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================== SCRIPTS ===================== -->
+<script>
+  // PAGE SWITCHING
+  function showPage(id, btn) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('page-' + id).classList.add('active');
+    btn.classList.add('active');
+    if (id === 'theory') drawPCMDiagram();
+  }
+
+  // ---- WAVEFORM MONITOR ----
+  const canvas = document.getElementById('waveform');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 800;
+  const H = 260;
+  canvas.width = W; canvas.height = H;
+
+  const buffer = new Array(W).fill(H / 2);
+  let paused = false;
+  let speed = 5;
+  let minADC = Infinity, maxADC = -Infinity, totalSamples = 0;
+
+  function drawGrid() {
+    ctx.strokeStyle = '#0a2010'; ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += W / 8) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += H / 4) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    ctx.strokeStyle = '#071508'; ctx.lineWidth = 0.5;
+    for (let x = 0; x < W; x += W / 32) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    ctx.strokeStyle = '#1a3a28'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  }
+
+  function drawWaveform() {
+    ctx.fillStyle = '#030a05'; ctx.fillRect(0, 0, W, H);
+    drawGrid();
+    ctx.strokeStyle = '#003d1f'; ctx.lineWidth = 4;
+    ctx.beginPath();
+    buffer.forEach((y, x) => x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.stroke();
+    ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    buffer.forEach((y, x) => x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.stroke();
+    const lY = buffer[buffer.length - 1];
+    ctx.beginPath(); ctx.arc(W - 1, lY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#00ff88'; ctx.fill();
+    ctx.beginPath(); ctx.arc(W - 1, lY, 9, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,255,136,0.25)'; ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  function togglePause() {
+    paused = !paused;
+    document.getElementById('btn-pause').innerHTML = paused ? '&#9654; Resume' : '&#9646;&#9646; Pause';
+  }
+
+  function clearWave() {
+    buffer.fill(H / 2);
+    minADC = Infinity; maxADC = -Infinity; totalSamples = 0;
+    ['s-min','s-max','s-total'].forEach(id => document.getElementById(id).textContent = '--');
+  }
+
+  const socket = io();
+
+  socket.on('connect', () => {
+    document.getElementById('status-text').textContent = 'STREAMING';
+    const d = document.getElementById('live-dot');
+    d.classList.remove('off');
+  });
+
+  socket.on('disconnect', () => {
+    document.getElementById('status-text').textContent = 'DISCONNECTED';
+    document.getElementById('live-dot').classList.add('off');
+  });
+
+  socket.on('pcm_data', (data) => {
+    if (paused) return;
+    const y = H - Math.round((data.raw / 1023) * H);
+    buffer.push(y);
+    if (buffer.length > W) buffer.shift();
+    if (data.raw < minADC) minADC = data.raw;
+    if (data.raw > maxADC) maxADC = data.raw;
+    totalSamples++;
+    document.getElementById('s-volt').innerHTML = data.voltage + '<span class="stat-unit">V</span>';
+    document.getElementById('s-raw').textContent = data.raw;
+    document.getElementById('s-min').textContent = minADC === Infinity ? '--' : minADC;
+    document.getElementById('s-max').textContent = maxADC === -Infinity ? '--' : maxADC;
+    document.getElementById('s-total').textContent = totalSamples > 9999 ? (totalSamples / 1000).toFixed(1) + 'k' : totalSamples;
+    drawWaveform();
+  });
+
+  drawWaveform();
+
+  // ---- PCM THEORY DIAGRAM ----
+  function drawPCMDiagram() {
+    const dc = document.getElementById('pcm-diag');
+    if (!dc) return;
+    const dw = dc.offsetWidth || 780;
+    dc.width = dw; dc.height = 140;
+    const dctx = dc.getContext('2d');
+    dctx.fillStyle = '#030a05'; dctx.fillRect(0, 0, dw, 140);
+
+    // grid
+    dctx.strokeStyle = '#0a2010'; dctx.lineWidth = 1;
+    for (let y = 0; y < 140; y += 35) {
+      dctx.beginPath(); dctx.moveTo(0, y); dctx.lineTo(dw, y); dctx.stroke();
+    }
+
+    const pts = 80;
+    function getY(i) {
+      return 70 - 55 * Math.sin(i / pts * Math.PI * 3.5 + 0.3) * (0.6 + 0.4 * Math.sin(i / pts * Math.PI * 1.3));
+    }
+
+    // analog wave
+    dctx.strokeStyle = '#00ff8866'; dctx.lineWidth = 2;
+    dctx.beginPath();
+    for (let i = 0; i <= pts; i++) {
+      const x = (i / pts) * dw;
+      const y = getY(i);
+      i === 0 ? dctx.moveTo(x, y) : dctx.lineTo(x, y);
+    }
+    dctx.stroke();
+
+    // quantized steps
+    const levels = 8;
+    const step = 120 / levels;
+    const sampleEvery = 6;
+    dctx.strokeStyle = '#ffaa0099'; dctx.lineWidth = 1.5;
+    let prevQY = null;
+    for (let i = 0; i <= pts; i += sampleEvery) {
+      const x = (i / pts) * dw;
+      const rawY = getY(i);
+      const qLevel = Math.round((rawY - 10) / step);
+      const qY = 10 + qLevel * step;
+      const nextX = ((i + sampleEvery) / pts) * dw;
+      dctx.beginPath();
+      if (prevQY !== null) { dctx.moveTo(x - ((sampleEvery / pts) * dw), prevQY); dctx.lineTo(x, prevQY); }
+      dctx.moveTo(x, prevQY !== null ? prevQY : qY);
+      dctx.lineTo(x, qY);
+      dctx.moveTo(x, qY); dctx.lineTo(Math.min(nextX, dw), qY);
+      dctx.stroke();
+
+      // sample dot
+      dctx.beginPath(); dctx.arc(x, rawY, 3, 0, Math.PI * 2);
+      dctx.fillStyle = '#00ff88'; dctx.fill();
+
+      prevQY = qY;
+    }
+  }
+</script>
+</body>
+</html>

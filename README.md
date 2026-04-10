@@ -12,10 +12,30 @@ A Flask and Socket.IO project that streams Arduino ADC values to a web UI and vi
 ## Requirements
 
 - Python 3.13
-- Flask
-- Flask-SocketIO
-- pyserial
+- Git
+- A virtual environment is recommended
 - An Arduino connected on the configured COM port
+
+The Python dependencies are listed in [requirements.txt](requirements.txt).
+
+## Installation
+
+1. Clone the repository.
+2. Open a terminal in the project folder.
+3. Create and activate a virtual environment.
+
+```powershell
+python -m venv .venv
+& ".venv\Scripts\Activate.ps1"
+```
+
+4. Install the dependencies.
+
+```powershell
+& ".venv\Scripts\python.exe" -m pip install -r requirements.txt
+```
+
+5. Connect your Arduino and confirm the COM port in `server.py`.
 
 ## Run
 
@@ -26,3 +46,4 @@ A Flask and Socket.IO project that streams Arduino ADC values to a web UI and vi
 ## Notes
 
 - Update `SERIAL_PORT` in `server.py` if your Arduino is not on `COM3`.
+- The app uses `Flask`, `Flask-SocketIO`, and `pyserial` from `requirements.txt`.

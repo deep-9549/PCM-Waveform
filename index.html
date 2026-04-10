@@ -352,6 +352,7 @@
 
     input[type=range] {
       -webkit-appearance: none;
+      appearance: none;
       width: 100px;
       height: 3px;
       background: var(--border);
@@ -361,6 +362,7 @@
 
     input[type=range]::-webkit-slider-thumb {
       -webkit-appearance: none;
+      appearance: none;
       width: 14px;
       height: 14px;
       border-radius: 50%;
@@ -828,9 +830,9 @@
         <span class="status-val" id="status-text">CONNECTING...</span>
       </div>
       <span class="status-sep">|</span>
-      <div class="status-item">Port: <span class="status-val">&nbsp;COM3</span></div>
+      <div class="status-item">Port: <span class="status-val">&nbsp;{{ serial_port }}</span></div>
       <span class="status-sep">|</span>
-      <div class="status-item">Baud: <span class="status-val">&nbsp;9600</span></div>
+      <div class="status-item">Baud: <span class="status-val">&nbsp;{{ baud_rate }}</span></div>
       <span class="status-sep">|</span>
       <div class="status-item">ADC: <span class="status-val">&nbsp;10-bit (0–1023)</span></div>
       <span class="status-sep">|</span>
@@ -1171,8 +1173,14 @@
   socket.on('pcm_data', (data) => {
     if (paused) return;
     const y = H - Math.round((data.raw / 1023) * H);
-    buffer.push(y);
-    if (buffer.length > W) buffer.shift();
+
+    // Advance by multiple pixels per sample so the Scroll slider affects motion.
+    const advance = Math.max(1, Math.min(10, speed));
+    for (let i = 0; i < advance; i++) {
+      buffer.push(y);
+      if (buffer.length > W) buffer.shift();
+    }
+
     if (data.raw < minADC) minADC = data.raw;
     if (data.raw > maxADC) maxADC = data.raw;
     totalSamples++;

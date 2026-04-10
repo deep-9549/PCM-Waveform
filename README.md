@@ -54,3 +54,9 @@ python -m venv .venv
 - If you see `ModuleNotFoundError`, reinstall dependencies with `& ".venv\Scripts\python.exe" -m pip install -r requirements.txt`.
 - If the serial port fails, confirm the Arduino is connected and update `SERIAL_PORT` in `server.py` to the correct COM port.
 - If Socket.IO does not connect, refresh the page after the server starts and check that port 5000 is not blocked.
+
+## Issues Faced and Fixes
+
+- We hit repeated `PermissionError(13, 'Access is denied')` errors on `COM12` when multiple server instances tried to open the same serial port. This was fixed by making the app run in a single stable process and adding a startup lock so a second copy exits cleanly instead of fighting for the port.
+- The Arduino output was not always a plain number, so the web UI originally received no samples. We fixed that by parsing labeled serial lines such as `Analog: 621  PCM: 155` and by ignoring occasional noisy bytes during serial reads.
+- A generated `.server.lock` file is now ignored by Git so it stays local and does not get pushed again.

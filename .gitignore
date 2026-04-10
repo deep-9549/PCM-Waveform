@@ -9,3 +9,4 @@ venv/
 .vscode/
 *.log
 .idea/
+.server.lock

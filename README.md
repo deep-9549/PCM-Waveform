@@ -47,3 +47,10 @@ python -m venv .venv
 
 - Update `SERIAL_PORT` in `server.py` if your Arduino is not on `COM3`.
 - The app uses `Flask`, `Flask-SocketIO`, and `pyserial` from `requirements.txt`.
+
+## Troubleshooting
+
+- If the browser does not load the page, make sure the Flask server is running and open http://127.0.0.1:5000/.
+- If you see `ModuleNotFoundError`, reinstall dependencies with `& ".venv\Scripts\python.exe" -m pip install -r requirements.txt`.
+- If the serial port fails, confirm the Arduino is connected and update `SERIAL_PORT` in `server.py` to the correct COM port.
+- If Socket.IO does not connect, refresh the page after the server starts and check that port 5000 is not blocked.

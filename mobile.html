@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#050c08">
+  <title>PCM Monitor</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --g:    #00ff88;
+      --gdim: #00cc6a;
+      --gdk:  #003d1f;
+      --gmid: #1a4a30;
+      --gsub: #0d2e1f;
+      --gfnt: #0a1f14;
+      --bg:   #050c08;
+      --bgc:  #0a110d;
+      --bgp:  #0d1810;
+      --bdr:  #1a3322;
+      --bdrbr:#2a5a3a;
+      --tdim: #3d7a5a;
+      --tmid: #5aaa7a;
+      --red:  #ff4466;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--g);
+      font-family: 'Share Tech Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* full-screen layout: header + content + footer pinned */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--bdr);
+      background: rgba(5,12,8,0.96);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(10px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .brand-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--g);
+      animation: blink 1.3s infinite;
+      flex-shrink: 0;
+    }
+
+    .brand-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      line-height: 1;
+    }
+
+    .header-badge {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      background: var(--gsub);
+      color: var(--gdim);
+      border: 1px solid var(--gmid);
+      border-radius: 20px;
+      padding: 4px 11px;
+    }
+
+    /* ── MAIN SCROLL AREA ── */
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ── SCOPE CARD ── */
+    .scope-card {
+      background: var(--bgc);
+      border: 1px solid var(--bdr);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .scope-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 13px;
+      border-bottom: 1px solid var(--bdr);
+      background: var(--bgp);
+    }
+
+    .scope-bar-label {
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      color: var(--tdim);
+      text-transform: uppercase;
+    }
+
+    .scope-bar-label span { color: var(--gdim); }
+    .scope-bar-spacer { flex: 1; }
+
+    .scope-pill {
+      font-size: 9px;
+      background: var(--gsub);
+      color: var(--gdim);
+      border: 1px solid var(--gmid);
+      border-radius: 4px;
+      padding: 2px 8px;
+      letter-spacing: 0.08em;
+    }
+
+    .scope-body {
+      position: relative;
+      background: #030a05;
+    }
+
+    .y-axis {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 36px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 6px 4px;
+      border-right: 1px solid var(--bdr);
+      z-index: 2;
+    }
+
+    .y-tick { font-size: 7px; color: var(--tdim); text-align: right; }
+
+    canvas {
+      display: block;
+      width: calc(100% - 36px);
+      margin-left: 36px;
+      height: 200px;
+    }
+
+    /* controls inside scope */
+    .scope-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 13px;
+      border-top: 1px solid var(--bdr);
+      background: var(--bgp);
+    }
+
+    .ctrl-btn {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      background: var(--gsub);
+      color: var(--gdim);
+      border: 1px solid var(--gmid);
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.15s;
+      -webkit-appearance: none;
+    }
+
+    .ctrl-btn:active { background: var(--gmid); }
+
+    .ctrl-btn.danger {
+      color: var(--red);
+      border-color: rgba(255,68,102,0.25);
+      background: rgba(255,68,102,0.06);
+    }
+
+    .ctrl-btn.danger:active { background: rgba(255,68,102,0.14); }
+
+    /* ── STATS GRID ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-card {
+      background: var(--bgc);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      padding: 14px 14px 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--gmid);
+    }
+
+    .stat-label {
+      font-size: 8px;
+      color: var(--tdim);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+
+    .stat-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 24px;
+      font-weight: 500;
+      color: var(--g);
+      line-height: 1;
+    }
+
+    .stat-unit {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: var(--tdim);
+      margin-left: 2px;
+    }
+
+    /* ── REPORT BUTTON ── */
+    .report-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: var(--gsub);
+      border: 1px solid var(--gmid);
+      border-radius: 14px;
+      padding: 18px 20px;
+      color: var(--g);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      text-decoration: none;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      -webkit-appearance: none;
+      transition: background 0.15s;
+    }
+
+    .report-btn:active { background: var(--gmid); }
+
+    .report-icon {
+      width: 36px; height: 36px;
+      border: 1.5px solid var(--gdim);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 16px;
+    }
+
+    .report-text { text-align: left; line-height: 1.5; }
+    .report-text-main { color: var(--g); font-size: 12px; letter-spacing: 0.12em; }
+    .report-text-sub { color: var(--tdim); font-size: 9px; letter-spacing: 0.1em; margin-top: 2px; }
+
+    .report-arrow {
+      margin-left: auto;
+      color: var(--gdim);
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    /* ── STATUS BAR ── */
+    .status-bar {
+      background: var(--bgc);
+      border: 1px solid var(--bdr);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+    }
+
+    .status-key { color: var(--tdim); letter-spacing: 0.1em; }
+    .status-val { color: var(--gdim); }
+
+    .status-live {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--g);
+      animation: blink 1s infinite;
+      flex-shrink: 0;
+    }
+
+    .live-dot.off { background: var(--red); animation: none; }
+    .live-text { font-size: 10px; letter-spacing: 0.12em; color: var(--gdim); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--bdr);
+      background: rgba(5,12,8,0.96);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(10px);
+    }
+
+    .footer-label { font-size: 9px; color: var(--tdim); letter-spacing: 0.1em; }
+
+    .desktop-link {
+      font-size: 9px;
+      color: var(--gdim);
+      letter-spacing: 0.1em;
+      text-decoration: none;
+      border: 1px solid var(--gmid);
+      border-radius: 5px;
+      padding: 4px 10px;
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.12} }
+
+    /* ── SAFE AREA for notched phones ── */
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      footer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+      header { padding-top: calc(14px + env(safe-area-inset-top)); }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- HEADER -->
+  <header>
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div class="brand-name">PCM Monitor</div>
+    </div>
+    <span class="header-badge">10-BIT ADC</span>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- OSCILLOSCOPE -->
+    <div class="scope-card">
+      <div class="scope-bar">
+        <span class="scope-bar-label">CH1 — <span>A0 / Pot</span></span>
+        <div class="scope-bar-spacer"></div>
+        <span class="scope-pill">9600 BAUD</span>
+      </div>
+
+      <div class="scope-body">
+        <div class="y-axis">
+          <span class="y-tick">5V</span>
+          <span class="y-tick">3.7</span>
+          <span class="y-tick">2.5</span>
+          <span class="y-tick">1.2</span>
+          <span class="y-tick">0V</span>
+        </div>
+        <canvas id="waveform" height="200"></canvas>
+      </div>
+
+      <div class="scope-controls">
+        <button class="ctrl-btn" id="btn-pause" onclick="togglePause()">&#9646;&#9646; Pause</button>
+        <button class="ctrl-btn danger" onclick="clearWave()">&#8635; Clear</button>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Voltage</div>
+        <div class="stat-value" id="s-volt">--<span class="stat-unit">V</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Raw ADC</div>
+        <div class="stat-value" id="s-raw">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Min ADC</div>
+        <div class="stat-value" id="s-min">--</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Max ADC</div>
+        <div class="stat-value" id="s-max">--</div>
+      </div>
+    </div>
+
+    <!-- REPORT BUTTON -->
+    <a href="project-report.pdf" target="_blank" class="report-btn">
+      <div class="report-icon">&#8659;</div>
+      <div class="report-text">
+        <div class="report-text-main">Project Report</div>
+        <div class="report-text-sub">Tap to open PDF</div>
+      </div>
+      <div class="report-arrow">&#8599;</div>
+    </a>
+
+    <!-- STATUS BAR -->
+    <div class="status-bar">
+      <div class="status-row">
+        <span class="status-key">Connection</span>
+        <div class="status-live">
+          <div class="live-dot" id="live-dot"></div>
+          <span class="live-text" id="live-text">Connecting...</span>
+        </div>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Port</span>
+        <span class="status-val">{{ serial_port }} — {{ baud_rate }}</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Resolution</span>
+        <span class="status-val">10-bit / 0–1023</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Reference</span>
+        <span class="status-val">5.0 V</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Samples</span>
+        <span class="status-val" id="s-total">0</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <span class="footer-label">ADC Subject — PCM Project</span>
+    <a href="/" class="desktop-link">Desktop view</a>
+  </footer>
+
+</div>
+
+<script>
+  // ── CANVAS SETUP ──
+  const canvas = document.getElementById('waveform');
+  const ctx    = canvas.getContext('2d');
+  let W, H, buffer;
+
+  function setupCanvas() {
+    W = canvas.offsetWidth;
+    H = 200;
+    canvas.width  = W;
+    canvas.height = H;
+    buffer = new Array(W).fill(H / 2);
+  }
+
+  setupCanvas();
+  window.addEventListener('resize', () => { setupCanvas(); drawWave(); });
+
+  // ── STATE ──
+  let paused = false;
+  let minADC = Infinity, maxADC = -Infinity, totalSamples = 0;
+
+  // ── DRAW ──
+  function drawGrid() {
+    ctx.strokeStyle = '#091a0e'; ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += W / 6) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += H / 4) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    // centre line
+    ctx.strokeStyle = '#1a4a30'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  }
+
+  function drawWave() {
+    ctx.fillStyle = '#030a05';
+    ctx.fillRect(0, 0, W, H);
+    drawGrid();
+
+    // glow layer
+    ctx.strokeStyle = '#003d1f'; ctx.lineWidth = 4;
+    ctx.beginPath();
+    buffer.forEach((y, x) => x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.stroke();
+
+    // main trace
+    ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    buffer.forEach((y, x) => x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.stroke();
+
+    // live tip dot
+    const lY = buffer[buffer.length - 1];
+    ctx.beginPath(); ctx.arc(W - 1, lY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#00ff88'; ctx.fill();
+    ctx.beginPath(); ctx.arc(W - 1, lY, 8, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,255,136,0.22)'; ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // ── CONTROLS ──
+  function togglePause() {
+    paused = !paused;
+    document.getElementById('btn-pause').innerHTML = paused
+      ? '&#9654; Resume'
+      : '&#9646;&#9646; Pause';
+  }
+
+  function clearWave() {
+    buffer.fill(H / 2);
+    minADC = Infinity; maxADC = -Infinity; totalSamples = 0;
+    document.getElementById('s-min').textContent   = '--';
+    document.getElementById('s-max').textContent   = '--';
+    document.getElementById('s-total').textContent = '0';
+    drawWave();
+  }
+
+  // ── SOCKET ──
+  const socket = io();
+
+  socket.on('connect', () => {
+    document.getElementById('live-text').textContent = 'STREAMING';
+    document.getElementById('live-dot').classList.remove('off');
+  });
+
+  socket.on('disconnect', () => {
+    document.getElementById('live-text').textContent = 'DISCONNECTED';
+    document.getElementById('live-dot').classList.add('off');
+  });
+
+  socket.on('pcm_data', (data) => {
+    if (paused) return;
+
+    const y = H - Math.round((data.raw / 1023) * H);
+    buffer.push(y);
+    if (buffer.length > W) buffer.shift();
+
+    if (data.raw < minADC) minADC = data.raw;
+    if (data.raw > maxADC) maxADC = data.raw;
+    totalSamples++;
+
+    document.getElementById('s-volt').innerHTML =
+      data.voltage + '<span class="stat-unit">V</span>';
+    document.getElementById('s-raw').textContent =
+      data.raw;
+    document.getElementById('s-min').textContent =
+      minADC === Infinity ? '--' : minADC;
+    document.getElementById('s-max').textContent =
+      maxADC === -Infinity ? '--' : maxADC;
+    document.getElementById('s-total').textContent =
+      totalSamples > 9999
+        ? (totalSamples / 1000).toFixed(1) + 'k'
+        : totalSamples;
+
+    drawWave();
+  });
+
+  // initial draw
+  drawWave();
+</script>
+</body>
+</html>

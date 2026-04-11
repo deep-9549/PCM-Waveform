@@ -753,6 +753,7 @@
   </div>
   <div class="nav-tabs">
     <button class="nav-tab active" onclick="showPage('monitor', this)">&#9632; Live Monitor</button>
+    <button class="nav-tab" onclick="showPage('alias', this)">&#9632; Aliasing Demo</button>
     <button class="nav-tab" onclick="showPage('theory', this)">&#9632; Theory &amp; Report</button>
   </div>
 </nav>
@@ -815,12 +816,51 @@
       <div class="controls-row">
         <button class="ctrl-btn" id="btn-pause" onclick="togglePause()">&#9646;&#9646; Pause</button>
         <button class="ctrl-btn danger" onclick="clearWave()">&#8635; Clear</button>
+        <button class="ctrl-btn" id="btn-audio" onclick="toggleAudio()">&#9654; Play Audio</button>
+
+        <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+          <span style="font-size:9px; color:var(--text-dim,#3d7a5a); letter-spacing:0.12em; text-transform:uppercase;">Vol</span>
+          <input type="range" id="vol-slider" min="0" max="1" step="0.05" value="0.5"
+            oninput="setVolume(+this.value)" style="width:80px; accent-color:#00ff88;">
+        </div>
         <div class="speed-wrap">
           <span class="speed-label">Scroll</span>
           <input type="range" id="speed" min="1" max="10" value="5" step="1"
             oninput="speed=parseInt(this.value); document.getElementById('speed-val').textContent=this.value">
           <span class="speed-val" id="speed-val">5</span>
         </div>
+      </div>
+    </div>
+
+    <div class="scope-container" style="margin-top:14px;">
+      <div class="scope-topbar">
+        <span class="scope-label">Oscillator wave &mdash; <span id="osc-type-label">Sine</span></span>
+        <span class="scope-label" style="margin-left:16px;">
+          Freq: <span id="osc-freq-display">--</span> Hz
+        </span>
+        <div class="scope-divider"></div>
+        <select id="osc-type" onchange="setOscType(this.value)"
+          style="font-family:'Share Tech Mono',monospace; font-size:10px;
+          background:var(--bg-panel,#0d1810); color:var(--green,#00ff88);
+          border:1px solid var(--border,#1a3322); border-radius:4px;
+          padding:3px 8px; letter-spacing:0.08em; cursor:pointer; outline:none;">
+          <option value="sine">Sine</option>
+          <option value="square">Square</option>
+          <option value="sawtooth">Sawtooth</option>
+          <option value="triangle">Triangle</option>
+        </select>
+      </div>
+
+      <div class="scope-wrap">
+        <div class="y-axis">
+          <span class="y-tick">+1</span>
+          <span class="y-tick">0</span>
+          <span class="y-tick">-1</span>
+        </div>
+        <canvas id="osc-canvas" height="160"
+          style="display:block; width:calc(100% - 44px);
+          margin-left:44px; height:160px; background:#030a05;">
+        </canvas>
       </div>
     </div>
 
@@ -838,7 +878,89 @@
       <span class="status-sep">|</span>
       <div class="status-item">Ref: <span class="status-val">&nbsp;5.0V</span></div>
       <span class="status-sep">|</span>
+      <div class="status-item">Freq: <span class="status-val" id="s-freq">&nbsp;-- Hz</span></div>
+      <span class="status-sep">|</span>
       <div class="status-item">Samples: <span class="status-val" id="s-total">&nbsp;0</span></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="page" id="page-alias">
+  <div class="monitor-wrap">
+
+    <div class="monitor-header">
+      <div>
+        <div class="monitor-title">Aliasing &amp; Nyquist Demo</div>
+        <div class="monitor-subtitle">
+          Interactive sampling rate simulator &mdash; drag below Nyquist to see aliasing appear
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns: repeat(3,1fr); margin-bottom:20px;">
+      <div class="stat-card">
+        <div class="stat-label">Signal Freq</div>
+        <div class="stat-value"><span id="a-fsig">5</span><span class="stat-unit">Hz</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sample Rate</div>
+        <div class="stat-value"><span id="a-frate">40</span><span class="stat-unit">Hz</span></div>
+      </div>
+      <div class="stat-card" id="a-nyq-card">
+        <div class="stat-label">Nyquist Limit</div>
+        <div class="stat-value"><span id="a-nyq">10</span><span class="stat-unit">Hz</span></div>
+      </div>
+    </div>
+
+    <div id="a-verdict" style="
+      text-align:center; font-size:12px; letter-spacing:0.14em;
+      text-transform:uppercase; padding:10px; border-radius:8px;
+      border:1px solid; margin-bottom:16px; transition: all 0.3s;
+    ">SAFE &mdash; sampling above Nyquist limit</div>
+
+    <div class="scope-container">
+      <div class="scope-topbar">
+        <span class="scope-label">Original signal <span style="color:#00ff88">━━</span></span>
+        <span class="scope-label" style="margin-left:16px">Reconstructed (aliased) <span style="color:#ffaa00">━━</span></span>
+        <span class="scope-label" style="margin-left:16px">Sample points <span style="color:#00aaff">●</span></span>
+      </div>
+      <canvas id="alias-canvas" height="260" style="display:block; width:100%; background:#030a05;"></canvas>
+    </div>
+
+    <div style="
+      background:var(--bg-panel,#0d1810); border:1px solid var(--border,#1a3322);
+      border-radius:10px; padding:18px 20px; margin-top:14px;
+      display:flex; flex-direction:column; gap:16px;
+    ">
+      <div style="display:flex; align-items:center; gap:14px;">
+        <span style="font-size:10px;color:var(--text-dim,#3d7a5a);letter-spacing:0.12em;text-transform:uppercase;width:110px;flex-shrink:0;">Signal Freq</span>
+        <input type="range" id="sl-fsig" min="1" max="20" value="5" step="1"
+          oninput="setSig(+this.value)" style="flex:1; accent-color:#00ff88;">
+        <span style="font-size:11px;color:#00ff88;min-width:52px;text-align:right;">
+          <span id="sl-fsig-val">5</span> Hz
+        </span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:14px;">
+        <span style="font-size:10px;color:var(--text-dim,#3d7a5a);letter-spacing:0.12em;text-transform:uppercase;width:110px;flex-shrink:0;">Sample Rate</span>
+        <input type="range" id="sl-frate" min="1" max="100" value="40" step="1"
+          oninput="setRate(+this.value)" style="flex:1; accent-color:#ffaa00;">
+        <span style="font-size:11px;color:#ffaa00;min-width:52px;text-align:right;">
+          <span id="sl-frate-val">40</span> Hz
+        </span>
+      </div>
+
+      <div id="a-explain" style="
+        font-family:'Inter',sans-serif; font-size:13px; color:var(--text-mid,#5aaa7a);
+        line-height:1.7; padding-top:10px; border-top:1px solid var(--border,#1a3322);
+      ">
+        Nyquist theorem satisfied. The reconstructed wave matches the original perfectly.
+      </div>
+
+      <div style="display:flex; justify-content:flex-end;">
+        <button class="ctrl-btn" id="btn-alias-pause" onclick="toggleAliasPause()">&#9646;&#9646; Pause Demo</button>
+      </div>
     </div>
 
   </div>
@@ -1090,13 +1212,23 @@
 
 <!-- ===================== SCRIPTS ===================== -->
 <script>
+  let aliasAnimId = null;
+  let aliasPaused = false;
+  let aliasTime = 0;
+
   // PAGE SWITCHING
   function showPage(id, btn) {
+    if (aliasAnimId) { cancelAnimationFrame(aliasAnimId); aliasAnimId = null; }
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('page-' + id).classList.add('active');
     btn.classList.add('active');
     if (id === 'theory') drawPCMDiagram();
+    if (id === 'alias') {
+      aliasPaused = false;
+      document.getElementById('btn-alias-pause').innerHTML = '&#9646;&#9646; Pause Demo';
+      initAlias();
+    }
   }
 
   // ---- WAVEFORM MONITOR ----
@@ -1149,12 +1281,15 @@
   function togglePause() {
     paused = !paused;
     document.getElementById('btn-pause').innerHTML = paused ? '&#9654; Resume' : '&#9646;&#9646; Pause';
+    if (paused && audioCtx) audioCtx.suspend();
+    if (!paused && audioCtx && audioRunning) audioCtx.resume();
   }
 
   function clearWave() {
     buffer.fill(H / 2);
     minADC = Infinity; maxADC = -Infinity; totalSamples = 0;
     ['s-min','s-max','s-total'].forEach(id => document.getElementById(id).textContent = '--');
+    document.getElementById('s-freq').textContent = '-- Hz';
   }
 
   const socket = io();
@@ -1189,7 +1324,9 @@
     document.getElementById('s-min').textContent = minADC === Infinity ? '--' : minADC;
     document.getElementById('s-max').textContent = maxADC === -Infinity ? '--' : maxADC;
     document.getElementById('s-total').textContent = totalSamples > 9999 ? (totalSamples / 1000).toFixed(1) + 'k' : totalSamples;
+    document.getElementById('s-freq').textContent = Math.round(adcToFreq(data.raw)) + ' Hz';
     drawWaveform();
+    feedAudio(data.raw);
   });
 
   drawWaveform();
@@ -1250,6 +1387,314 @@
       prevQY = qY;
     }
   }
+
+  // ---- ALIASING DEMO ----
+  let aFsig = 5;
+  let aFrate = 40;
+
+  function setSig(v) {
+    aFsig = v;
+    document.getElementById('a-fsig').textContent = v;
+    document.getElementById('sl-fsig-val').textContent = v;
+    updateAlias();
+  }
+
+  function setRate(v) {
+    aFrate = v;
+    document.getElementById('a-frate').textContent = v;
+    document.getElementById('sl-frate-val').textContent = v;
+    updateAlias();
+  }
+
+  function updateAlias() {
+    const nyq = aFsig * 2;
+    document.getElementById('a-nyq').textContent = nyq;
+
+    const safe = aFrate >= nyq;
+    const verdict = document.getElementById('a-verdict');
+    const card = document.getElementById('a-nyq-card');
+    const explain = document.getElementById('a-explain');
+
+    if (safe) {
+      verdict.textContent = 'SAFE - sampling above Nyquist limit';
+      verdict.style.color = '#00ff88';
+      verdict.style.borderColor = '#1a4a30';
+      verdict.style.background = '#0d2e1f';
+      card.style.borderColor = '#1a3322';
+      explain.textContent = `Nyquist satisfied (${aFrate} Hz >= ${nyq} Hz). `
+        + `The reconstructed wave matches the original perfectly. `
+        + `You need at least ${nyq} samples/sec to capture a ${aFsig} Hz signal.`;
+    } else {
+      const alias = Math.abs(aFrate - aFsig);
+      verdict.textContent = `ALIASING! Reconstructed wave appears as ${alias} Hz instead of ${aFsig} Hz`;
+      verdict.style.color = '#ff4466';
+      verdict.style.borderColor = 'rgba(255,68,102,0.3)';
+      verdict.style.background = 'rgba(255,68,102,0.07)';
+      card.style.borderColor = 'rgba(255,68,102,0.4)';
+      explain.textContent = `Nyquist VIOLATED (${aFrate} Hz < ${nyq} Hz). `
+        + `Sampling too slow - the ${aFsig} Hz signal folds back and appears as ${alias} Hz. `
+        + `This is aliasing. Increase sample rate above ${nyq} Hz to fix it.`;
+    }
+  }
+
+  function toggleAliasPause() {
+    aliasPaused = !aliasPaused;
+    const btn = document.getElementById('btn-alias-pause');
+    btn.innerHTML = aliasPaused ? '&#9654; Resume Demo' : '&#9646;&#9646; Pause Demo';
+
+    if (aliasPaused) {
+      if (aliasAnimId) {
+        cancelAnimationFrame(aliasAnimId);
+        aliasAnimId = null;
+      }
+      return;
+    }
+
+    if (document.getElementById('page-alias').classList.contains('active') && !aliasAnimId) {
+      initAlias();
+    }
+  }
+
+  function initAlias() {
+    const cv = document.getElementById('alias-canvas');
+    const ctx = cv.getContext('2d');
+    const W = cv.offsetWidth || 800;
+    const H = 260;
+    cv.width = W;
+    cv.height = H;
+
+    if (aliasAnimId) cancelAnimationFrame(aliasAnimId);
+
+    function frame() {
+      ctx.fillStyle = '#030a05';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.strokeStyle = '#0d2218'; ctx.lineWidth = 1;
+      for (let x = 0; x < W; x += W / 8) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+      }
+      for (let y = 0; y < H; y += H / 4) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      }
+
+      const cy = H / 2;
+      const amp = H * 0.38;
+      const dur = 3;
+      const pps = W / dur;
+
+      ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let px = 0; px < W; px++) {
+        const sec = aliasTime + px / pps;
+        const y = cy - amp * Math.sin(2 * Math.PI * aFsig * sec);
+        px === 0 ? ctx.moveTo(px, y) : ctx.lineTo(px, y);
+      }
+      ctx.stroke();
+
+      const sInterval = 1 / aFrate;
+      let firstT = Math.ceil(aliasTime / sInterval) * sInterval;
+      for (let st = firstT; st < aliasTime + dur; st += sInterval) {
+        const px = (st - aliasTime) * pps;
+        const sy = cy - amp * Math.sin(2 * Math.PI * aFsig * st);
+        ctx.beginPath();
+        ctx.arc(px, sy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#00aaff'; ctx.fill();
+      }
+
+      const fAlias = Math.abs(aFsig - Math.round(aFsig / aFrate) * aFrate);
+      ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      for (let px = 0; px < W; px++) {
+        const sec = aliasTime + px / pps;
+        const y = cy - amp * Math.sin(2 * Math.PI * fAlias * sec);
+        px === 0 ? ctx.moveTo(px, y) : ctx.lineTo(px, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      aliasTime += 0.016;
+      aliasAnimId = aliasPaused ? null : requestAnimationFrame(frame);
+    }
+
+    frame();
+    updateAlias();
+  }
+
+  // ---- TONE GENERATOR (ADC controls pitch) ----
+  let audioCtx = null;
+  let oscillator = null;
+  let gainNode = null;
+  let audioRunning = false;
+  let oscPhase = 0;
+  let oscAnimId = null;
+  let currentFreq = 440;
+
+  function adcToFreq(adc) {
+    const minF = 80;
+    const maxF = 1200;
+    return minF + (adc / 1023) * (maxF - minF);
+  }
+
+  function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0.5;
+    gainNode.connect(audioCtx.destination);
+  }
+
+  // ---- OSCILLATOR DISPLAY ----
+  function getOscSample(phase, type) {
+    const t = ((phase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    switch (type) {
+      case 'sine':
+        return Math.sin(t);
+      case 'square':
+        return t < Math.PI ? 1 : -1;
+      case 'sawtooth':
+        return (t / Math.PI) - 1;
+      case 'triangle':
+        return t < Math.PI ? (2 * t / Math.PI) - 1 : 3 - (2 * t / Math.PI);
+      default:
+        return Math.sin(t);
+    }
+  }
+
+  function drawOscCanvas() {
+    const cv = document.getElementById('osc-canvas');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const W = cv.offsetWidth || 756;
+    const H = 160;
+    if (cv.width !== W) cv.width = W;
+    cv.height = H;
+
+    const type = document.getElementById('osc-type').value;
+    const cy = H / 2;
+    const amp = H * 0.38;
+    const cyclesVisible = Math.max(1, Math.min(8, currentFreq / 80));
+    const phasePerPx = (cyclesVisible * 2 * Math.PI) / W;
+
+    ctx.fillStyle = '#030a05';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#0d2218'; ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += W / 8) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+
+    ctx.strokeStyle = '#1a4a30'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+
+    ctx.strokeStyle = '#3d2200'; ctx.lineWidth = 4;
+    ctx.beginPath();
+    for (let px = 0; px < W; px++) {
+      const sample = getOscSample(oscPhase + px * phasePerPx, type);
+      const y = cy - sample * amp;
+      px === 0 ? ctx.moveTo(px, y) : ctx.lineTo(px, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let px = 0; px < W; px++) {
+      const sample = getOscSample(oscPhase + px * phasePerPx, type);
+      const y = cy - sample * amp;
+      px === 0 ? ctx.moveTo(px, y) : ctx.lineTo(px, y);
+    }
+    ctx.stroke();
+
+    const tipSample = getOscSample(oscPhase + (W - 1) * phasePerPx, type);
+    const tipY = cy - tipSample * amp;
+    ctx.beginPath(); ctx.arc(W - 1, tipY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffaa00'; ctx.fill();
+    ctx.beginPath(); ctx.arc(W - 1, tipY, 8, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,170,0,0.2)'; ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    oscPhase += (2 * Math.PI * currentFreq) / (60 * W / cyclesVisible);
+    oscAnimId = requestAnimationFrame(drawOscCanvas);
+  }
+
+  function startOscDisplay() {
+    if (oscAnimId) cancelAnimationFrame(oscAnimId);
+    drawOscCanvas();
+  }
+
+  function stopOscDisplay() {
+    if (oscAnimId) {
+      cancelAnimationFrame(oscAnimId);
+      oscAnimId = null;
+    }
+  }
+
+  function toggleAudio() {
+    if (!audioRunning) {
+      startAudio();
+    } else {
+      stopAudio();
+    }
+  }
+
+  function startAudio() {
+    initAudio();
+
+    audioCtx.resume().then(() => {
+      oscillator = audioCtx.createOscillator();
+      oscillator.type = document.getElementById('osc-type').value;
+      oscillator.frequency.value = 440;
+      oscillator.connect(gainNode);
+      oscillator.start();
+
+      audioRunning = true;
+      startOscDisplay();
+      const btn = document.getElementById('btn-audio');
+      btn.innerHTML = '&#9646;&#9646; Stop Audio';
+      btn.style.color = '#ff4466';
+      btn.style.borderColor = 'rgba(255,68,102,0.4)';
+    });
+  }
+
+  function stopAudio() {
+    if (oscillator) {
+      oscillator.stop();
+      oscillator = null;
+    }
+    if (audioCtx) audioCtx.suspend();
+    audioRunning = false;
+    stopOscDisplay();
+    const btn = document.getElementById('btn-audio');
+    btn.innerHTML = '&#9654; Play Audio';
+    btn.style.color = '';
+    btn.style.borderColor = '';
+  }
+
+  function setVolume(v) {
+    if (gainNode) gainNode.gain.value = v;
+  }
+
+  function setOscType(type) {
+    if (oscillator) oscillator.type = type;
+    document.getElementById('osc-type-label').textContent = type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  function feedAudio(rawADC) {
+    if (!audioRunning || !oscillator) return;
+    const freq = adcToFreq(rawADC);
+    oscillator.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.05);
+    currentFreq = freq;
+    document.getElementById('osc-freq-display').textContent = Math.round(freq);
+  }
+
+  window.addEventListener('beforeunload', () => {
+    stopOscDisplay();
+    if (oscillator) {
+      oscillator.stop();
+      oscillator = null;
+    }
+    if (audioCtx) audioCtx.close();
+  });
 </script>
 </body>
 </html>

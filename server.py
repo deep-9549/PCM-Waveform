@@ -75,6 +75,10 @@ def read_serial():
 def index():
     return render_template('index.html', serial_port=SERIAL_PORT, baud_rate=BAUD_RATE)
 
+@app.route('/mobile')
+def mobile():
+    return render_template('mobile.html', serial_port=SERIAL_PORT, baud_rate=BAUD_RATE)
+
 if __name__ == '__main__':
     instance_lock = acquire_single_instance_lock()
     if instance_lock is None:
@@ -86,4 +90,4 @@ if __name__ == '__main__':
     if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not debug_mode:
         thread = threading.Thread(target=read_serial, daemon=True)
         thread.start()
-    socketio.run(app, debug=debug_mode, port=5000)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=debug_mode)

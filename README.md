@@ -96,5 +96,4 @@ Then open one of these in your browser:
 
 - We hit repeated `PermissionError(13, 'Access is denied')` errors on `COM12` when multiple server instances tried to open the same serial port. This was fixed by making the app run in a single stable process and adding a startup lock so a second copy exits cleanly instead of fighting for the port.
 - The Arduino output was not always a plain number, so the web UI originally received no samples. We fixed that by parsing labeled serial lines such as `Analog: 621  PCM: 155` and by ignoring occasional noisy bytes during serial reads.
-- A generated `.server.lock` file is now ignored by Git so it stays local and does not get pushed again.
 - The server now exposes both desktop and mobile routes, and listens on `0.0.0.0` so devices on the same network can connect.

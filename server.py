@@ -8,7 +8,7 @@ import msvcrt
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 
-app = Flask(__name__, template_folder='.')
+app = Flask(__name__, template_folder='.', static_folder='.', static_url_path='')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Change 'COM3' to your Arduino port (Windows: COM3/COM4, Linux/Mac: /dev/ttyUSB0)
